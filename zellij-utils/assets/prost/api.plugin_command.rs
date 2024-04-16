@@ -420,6 +420,8 @@ pub enum CommandName {
     KillSessions = 81,
     ScanHostFolder = 82,
     WatchFilesystem = 83,
+    DumpSessionLayout = 84,
+    CloseSelf = 85,
 }
 impl CommandName {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -512,6 +514,8 @@ impl CommandName {
             CommandName::KillSessions => "KillSessions",
             CommandName::ScanHostFolder => "ScanHostFolder",
             CommandName::WatchFilesystem => "WatchFilesystem",
+            CommandName::DumpSessionLayout => "DumpSessionLayout",
+            CommandName::CloseSelf => "CloseSelf",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -601,6 +605,8 @@ impl CommandName {
             "KillSessions" => Some(Self::KillSessions),
             "ScanHostFolder" => Some(Self::ScanHostFolder),
             "WatchFilesystem" => Some(Self::WatchFilesystem),
+            "DumpSessionLayout" => Some(Self::DumpSessionLayout),
+            "CloseSelf" => Some(Self::CloseSelf),
             _ => None,
         }
     }

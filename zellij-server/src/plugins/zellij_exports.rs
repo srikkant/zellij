@@ -263,6 +263,8 @@ fn host_run_plugin_command(env: FunctionEnvMut<ForeignFunctionEnv>) {
                         scan_host_folder(env, folder_to_scan)
                     },
                     PluginCommand::WatchFilesystem => watch_filesystem(env),
+                    PluginCommand::DumpSessionLayout => dump_session_layout(env),
+                    PluginCommand::CloseSelf => close_self(env),
                 },
                 (PermissionStatus::Denied, permission) => {
                     log::error!(
@@ -318,7 +320,13 @@ fn cli_pipe_output(env: &ForeignFunctionEnv, pipe_name: String, output: String) 
         .context("failed to send pipe output")
 }
 
-fn message_to_plugin(env: &ForeignFunctionEnv, message_to_plugin: MessageToPlugin) -> Result<()> {
+fn message_to_plugin(
+    env: &ForeignFunctionEnv,
+    mut message_to_plugin: MessageToPlugin,
+) -> Result<()> {
+    if message_to_plugin.plugin_url.as_ref().map(|s| s.as_str()) == Some("zellij:OWN_URL") {
+        message_to_plugin.plugin_url = Some(env.plugin_env.plugin.location.display());
+    }
     env.plugin_env
         .senders
         .send_to_plugin(PluginInstruction::MessageFromPlugin {
@@ -810,6 +818,22 @@ fn show_self(env: &ForeignFunctionEnv, should_float_if_hidden: bool) {
     let action = Action::FocusPluginPaneWithId(env.plugin_env.plugin_id, should_float_if_hidden);
     let error_msg = || format!("Failed to show self for plugin");
     apply_action!(action, error_msg, env);
+}
+
+fn close_self(env: &ForeignFunctionEnv) {
+    env.plugin_env
+        .senders
+        .send_to_screen(ScreenInstruction::ClosePane(
+            PaneId::Plugin(env.plugin_env.plugin_id),
+            None,
+        ))
+        .with_context(|| format!("failed to close self"))
+        .non_fatal();
+    env.plugin_env
+        .senders
+        .send_to_plugin(PluginInstruction::Unload(env.plugin_env.plugin_id))
+        .with_context(|| format!("failed to close self"))
+        .non_fatal();
 }
 
 fn switch_to_mode(env: &ForeignFunctionEnv, input_mode: InputMode) {
@@ -1340,6 +1364,14 @@ fn watch_filesystem(env: &ForeignFunctionEnv) {
         .map(|sender| sender.send(PluginInstruction::WatchFilesystem));
 }
 
+fn dump_session_layout(env: &ForeignFunctionEnv) {
+    let _ = env.plugin_env.senders.to_screen.as_ref().map(|sender| {
+        sender.send(ScreenInstruction::DumpLayoutToPlugin(
+            env.plugin_env.plugin_id,
+        ))
+    });
+}
+
 fn scan_host_folder(env: &ForeignFunctionEnv, folder_to_scan: PathBuf) {
     if !folder_to_scan.starts_with("/host") {
         log::error!(
@@ -1542,6 +1574,7 @@ fn check_command_permission(
         | PluginCommand::BlockCliPipeInput(..)
         | PluginCommand::CliPipeOutput(..) => PermissionType::ReadCliPipes,
         PluginCommand::MessageToPlugin(..) => PermissionType::MessageAndLaunchOtherPlugins,
+        PluginCommand::DumpSessionLayout => PermissionType::ReadApplicationState,
         _ => return (PermissionStatus::Granted, None),
     };
 

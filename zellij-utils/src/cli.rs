@@ -125,6 +125,10 @@ pub enum Sessions {
         #[clap(short, long, value_parser)]
         create: bool,
 
+        /// Create a detached session in the background if one does not exist
+        #[clap(short('b'), long, value_parser)]
+        create_background: bool,
+
         /// Number of the session index in the active sessions ordered creation date.
         #[clap(long, value_parser)]
         index: Option<usize>,
@@ -616,6 +620,10 @@ pub enum CliAction {
         /// Change the working directory of the new tab
         #[clap(short, long, value_parser, requires("layout"))]
         cwd: Option<PathBuf>,
+    },
+    /// Move the focused tab in the specified direction. [right|left]
+    MoveTab {
+        direction: Direction,
     },
     PreviousSwapLayout,
     NextSwapLayout,

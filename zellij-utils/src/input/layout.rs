@@ -435,9 +435,7 @@ pub struct PluginAlias {
 
 impl PartialEq for PluginAlias {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-            && self.configuration == other.configuration
-            && self.initial_cwd == other.initial_cwd
+        self.name == other.name && self.configuration == other.configuration
     }
 }
 
@@ -454,6 +452,27 @@ impl PluginAlias {
                 .map(|c| PluginUserConfiguration::new(c.clone())),
             initial_cwd,
             ..Default::default()
+        }
+    }
+    pub fn set_caller_cwd_if_not_set(&mut self, caller_cwd: Option<PathBuf>) {
+        // we do this only for an alias because in all other cases this will be handled by the
+        // "cwd" configuration key above
+        // for an alias we might have cases where the cwd is defined on the alias but we still
+        // want to pass the "caller" cwd for the plugin the alias resolves into (eg. a
+        // filepicker that has access to the whole filesystem but wants to start in a specific
+        // folder)
+        if let Some(caller_cwd) = caller_cwd {
+            if self
+                .configuration
+                .as_ref()
+                .map(|c| c.inner().get("caller_cwd").is_none())
+                .unwrap_or(true)
+            {
+                let configuration = self
+                    .configuration
+                    .get_or_insert_with(|| PluginUserConfiguration::new(BTreeMap::new()));
+                configuration.insert("caller_cwd", caller_cwd.display().to_string());
+            }
         }
     }
 }
@@ -571,7 +590,7 @@ impl RunPluginLocation {
         match self {
             RunPluginLocation::File(pathbuf) => format!("file:{}", pathbuf.display()),
             RunPluginLocation::Zellij(plugin_tag) => format!("zellij:{}", plugin_tag),
-            RunPluginLocation::Remote(url) => format!("remote:{}", url),
+            RunPluginLocation::Remote(url) => String::from(url),
         }
     }
 }
@@ -584,7 +603,7 @@ impl From<&RunPluginLocation> for Url {
                 path.clone().into_os_string().into_string().unwrap()
             ),
             RunPluginLocation::Zellij(tag) => format!("zellij:{}", tag),
-            RunPluginLocation::Remote(url) => format!("remote:{}", url),
+            RunPluginLocation::Remote(url) => String::from(url),
         };
         Self::parse(&url).unwrap()
     }
@@ -828,6 +847,7 @@ impl TiledPaneLayout {
         &self,
         space: &PaneGeom,
         max_panes: Option<usize>,
+        ignore_percent_split_sizes: bool,
     ) -> Result<Vec<(TiledPaneLayout, PaneGeom)>, &'static str> {
         let layouts = match max_panes {
             Some(max_panes) => {
@@ -853,9 +873,9 @@ impl TiledPaneLayout {
                     layout_to_split.focus_deepest_pane();
                 }
 
-                split_space(space, &layout_to_split, space)?
+                split_space(space, &layout_to_split, space, ignore_percent_split_sizes)?
             },
-            None => split_space(space, self, space)?,
+            None => split_space(space, self, space, ignore_percent_split_sizes)?,
         };
         for (_pane_layout, pane_geom) in layouts.iter() {
             if !pane_geom.is_at_least_minimum_size() {
@@ -1405,6 +1425,7 @@ fn split_space(
     space_to_split: &PaneGeom,
     layout: &TiledPaneLayout,
     total_space_to_split: &PaneGeom,
+    ignore_percent_split_sizes: bool,
 ) -> Result<Vec<(TiledPaneLayout, PaneGeom)>, &'static str> {
     let sizes: Vec<Option<SplitSize>> = if layout.children_are_stacked {
         let index_of_expanded_pane = layout.children.iter().position(|p| p.is_expanded_in_stack);
@@ -1419,6 +1440,15 @@ fn split_space(
             *last_size = None;
         }
         sizes
+    } else if ignore_percent_split_sizes {
+        layout
+            .children
+            .iter()
+            .map(|part| match part.split_size {
+                Some(SplitSize::Percent(_)) => None,
+                split_size => split_size,
+            })
+            .collect()
     } else {
         layout.children.iter().map(|part| part.split_size).collect()
     };
@@ -1518,8 +1548,12 @@ fn split_space(
     for (i, part) in layout.children.iter().enumerate() {
         let part_position_and_size = split_geom.get(i).unwrap();
         if !part.children.is_empty() {
-            let mut part_positions =
-                split_space(part_position_and_size, part, total_space_to_split)?;
+            let mut part_positions = split_space(
+                part_position_and_size,
+                part,
+                total_space_to_split,
+                ignore_percent_split_sizes,
+            )?;
             pane_positions.append(&mut part_positions);
         } else {
             let part = part.clone();

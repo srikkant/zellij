@@ -860,6 +860,9 @@ impl TryFrom<(&KdlNode, &Options)> for Action {
                     )
                 })?;
 
+                let swap_tiled_layouts = Some(layout.swap_tiled_layouts.clone());
+                let swap_floating_layouts = Some(layout.swap_floating_layouts.clone());
+
                 let mut tabs = layout.tabs();
                 if tabs.len() > 1 {
                     return Err(ConfigError::new_kdl_error(
@@ -874,8 +877,8 @@ impl TryFrom<(&KdlNode, &Options)> for Action {
                     Ok(Action::NewTab(
                         Some(layout),
                         floating_panes_layout,
-                        None,
-                        None,
+                        swap_tiled_layouts,
+                        swap_floating_layouts,
                         name,
                     ))
                 } else {
@@ -884,8 +887,8 @@ impl TryFrom<(&KdlNode, &Options)> for Action {
                     Ok(Action::NewTab(
                         Some(layout),
                         floating_panes_layout,
-                        None,
-                        None,
+                        swap_tiled_layouts,
+                        swap_floating_layouts,
                         name,
                     ))
                 }
@@ -1608,6 +1611,9 @@ impl Options {
         let serialization_interval =
             kdl_property_first_arg_as_i64_or_error!(kdl_options, "serialization_interval")
                 .map(|(scroll_buffer_size, _entry)| scroll_buffer_size as u64);
+        let disable_session_metadata =
+            kdl_property_first_arg_as_bool_or_error!(kdl_options, "disable_session_metadata")
+                .map(|(v, _)| v);
         Ok(Options {
             simplified_ui,
             theme,
@@ -1634,6 +1640,7 @@ impl Options {
             scrollback_lines_to_serialize,
             styled_underlines,
             serialization_interval,
+            disable_session_metadata,
         })
     }
 }
